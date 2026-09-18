@@ -228,12 +228,20 @@ func LoadAgentSpecs(configRoot string) ([]AgentSpec, error) {
 }
 
 func SyncSpecsFromConfigRoot(ctx context.Context, store *cpstore.Store, configRoot, defaultRootBase string) (SyncSummary, error) {
-	if store == nil {
-		return SyncSummary{}, fmt.Errorf("sync specs requires a store")
-	}
 	specs, err := LoadAgentSpecs(configRoot)
 	if err != nil {
 		return SyncSummary{}, err
+	}
+	return SyncSpecs(ctx, store, specs, configRoot, defaultRootBase)
+}
+
+// SyncSpecs upserts the provided agent specs into the store and deletes agents
+// that are no longer present. Callers that load specs outside the config-root
+// layout (for example LoadAgentSpecFile) should pass the directory that
+// relative root_path / mount resolution should use as configRoot.
+func SyncSpecs(ctx context.Context, store *cpstore.Store, specs []AgentSpec, configRoot, defaultRootBase string) (SyncSummary, error) {
+	if store == nil {
+		return SyncSummary{}, fmt.Errorf("sync specs requires a store")
 	}
 	if err := validateUniqueAgentRoots(configRoot, defaultRootBase, specs); err != nil {
 		return SyncSummary{}, err
