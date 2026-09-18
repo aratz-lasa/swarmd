@@ -6,6 +6,7 @@
 
 - [Overview](#overview)
 - [Quick Start](#quick-start)
+- [One-Shot Agent Run](#one-shot-agent-run)
 - [Deployment](#deployment)
 - [Examples](#examples)
 - [Agent YAML](#agent-yaml)
@@ -111,6 +112,17 @@ go run ./pkg/server/cmd/swarmd tui \
 ```
 
 For the full runnable walkthrough, start with [examples/agents/hello-heartbeat](examples/agents/hello-heartbeat/README.md) or browse [examples/README.md](examples/README.md) for more example roots.
+
+## One-Shot Agent Run
+
+To run a single agent YAML once without leaving a long-lived server process running:
+
+```sh
+export ANTHROPIC_API_KEY=...
+swarmd agent run -config ./path/to/agent.yaml -data-dir ./data -root ./agent-root
+```
+
+This loads the spec, syncs it into SQLite under `-data-dir`, enqueues one trigger, and exits when the mailbox message completes (or dead-letters). Use `-disable-tool slack_post` to dry-run without Slack posts. Persistent memory lives at `<root>/.memory/`.
 
 ## Deployment
 
