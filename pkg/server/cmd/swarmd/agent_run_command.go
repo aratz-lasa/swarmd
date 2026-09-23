@@ -47,8 +47,8 @@ func runAgentRun(ctx context.Context, args []string, streams commandIO) error {
 	rootDir := fs.String("root", "", "sandbox root; sets root_path before sync (relative paths are resolved)")
 	timeout := fs.Duration("timeout", 45*time.Minute, "maximum time to wait for the run to finish")
 	liveOutput := fs.Bool("live-output", true, "mirror worker stdout/stderr to this process")
-	openAIAPIKey := fs.String("api-key", strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), "OpenAI API key for worker agents")
-	anthropicAPIKey := fs.String("anthropic-api-key", strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")), "Anthropic API key for worker agents")
+	openAIAPIKey := fs.String("api-key", "", "OpenAI API key for worker agents (default: OPENAI_API_KEY)")
+	anthropicAPIKey := fs.String("anthropic-api-key", "", "Anthropic API key for worker agents (default: ANTHROPIC_API_KEY)")
 	var disableTools stringList
 	fs.Var(&disableTools, "disable-tool", "disable a tool by id before sync (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -68,8 +68,8 @@ func runAgentRun(ctx context.Context, args []string, streams commandIO) error {
 		disableTools: append([]string(nil), disableTools...),
 		timeout:      *timeout,
 		liveOutput:   *liveOutput,
-		openAIAPIKey: strings.TrimSpace(*openAIAPIKey),
-		anthropicKey: strings.TrimSpace(*anthropicAPIKey),
+		openAIAPIKey: firstNonEmpty(strings.TrimSpace(*openAIAPIKey), strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))),
+		anthropicKey: firstNonEmpty(strings.TrimSpace(*anthropicAPIKey), strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY"))),
 	}, streams)
 }
 
