@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -43,9 +44,11 @@ func runAgentRun(ctx context.Context, args []string, streams commandIO) error {
 	fs.SetOutput(streams.stderr)
 	configPath := fs.String("config", "", "path to a single agent YAML spec (required)")
 	dataDir := fs.String("data-dir", envOr("SWARMD_SERVER_DATA_DIR", defaultDataDir), "base directory for SQLite and default agent roots")
-	rootDir := fs.String("root", "", "absolute sandbox root; sets root_path before sync")
+	rootDir := fs.String("root", "", "sandbox root; sets root_path before sync (relative paths are resolved)")
 	timeout := fs.Duration("timeout", 45*time.Minute, "maximum time to wait for the run to finish")
 	liveOutput := fs.Bool("live-output", true, "mirror worker stdout/stderr to this process")
+	openAIAPIKey := fs.String("api-key", strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), "OpenAI API key for worker agents")
+	anthropicAPIKey := fs.String("anthropic-api-key", strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")), "Anthropic API key for worker agents")
 	var disableTools stringList
 	fs.Var(&disableTools, "disable-tool", "disable a tool by id before sync (repeatable)")
 	if err := fs.Parse(args); err != nil {
@@ -65,8 +68,8 @@ func runAgentRun(ctx context.Context, args []string, streams commandIO) error {
 		disableTools: append([]string(nil), disableTools...),
 		timeout:      *timeout,
 		liveOutput:   *liveOutput,
-		openAIAPIKey: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		anthropicKey: strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")),
+		openAIAPIKey: strings.TrimSpace(*openAIAPIKey),
+		anthropicKey: strings.TrimSpace(*anthropicAPIKey),
 	}, streams)
 }
 
@@ -97,11 +100,23 @@ func runAgentOnce(ctx context.Context, spec server.AgentSpec, opts agentOnceOpti
 	}
 	if len(disableSet) > 0 {
 		disabled := false
+		matched := make(map[string]struct{}, len(disableSet))
 		for i := range spec.Tools {
 			id := strings.TrimSpace(spec.Tools[i].ID)
 			if _, ok := disableSet[id]; ok {
 				spec.Tools[i].Enabled = &disabled
+				matched[id] = struct{}{}
 			}
+		}
+		var unknown []string
+		for id := range disableSet {
+			if _, ok := matched[id]; !ok {
+				unknown = append(unknown, id)
+			}
+		}
+		if len(unknown) > 0 {
+			sort.Strings(unknown)
+			return fmt.Errorf("unknown -disable-tool id(s): %s", strings.Join(unknown, ", "))
 		}
 	}
 
@@ -138,7 +153,7 @@ func runAgentOnce(ctx context.Context, spec server.AgentSpec, opts agentOnceOpti
 	defer store.Close()
 
 	configRoot := filepath.Dir(spec.SourcePath)
-	summary, err := server.SyncSpecs(ctx, store, []server.AgentSpec{spec}, configRoot, rootBase)
+	summary, err := server.SyncSpecsUpsert(ctx, store, []server.AgentSpec{spec}, configRoot, rootBase)
 	if err != nil {
 		return err
 	}
@@ -152,11 +167,12 @@ func runAgentOnce(ctx context.Context, spec server.AgentSpec, opts agentOnceOpti
 	)
 	fmt.Fprintf(
 		streams.stdout,
-		"sync> namespaces(created=%d updated=%d) agents(created=%d updated=%d) schedules(created=%d deleted=%d)\n",
+		"sync> namespaces(created=%d updated=%d) agents(created=%d updated=%d deleted=%d) schedules(created=%d deleted=%d)\n",
 		summary.NamespacesCreated,
 		summary.NamespacesUpdated,
 		summary.AgentsCreated,
 		summary.AgentsUpdated,
+		summary.AgentsDeleted,
 		summary.SchedulesCreated,
 		summary.SchedulesDeleted,
 	)

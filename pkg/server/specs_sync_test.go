@@ -160,6 +160,54 @@ schedules:
 	}
 }
 
+func TestSyncSpecsUpsertDoesNotPruneOtherAgents(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	store := newServerStore(t)
+	rootBase := filepath.Join(t.TempDir(), "roots")
+	configRoot := t.TempDir()
+
+	if _, err := store.PutNamespace(ctx, cpstore.CreateNamespaceParams{ID: "default", Name: "default"}); err != nil {
+		t.Fatalf("PutNamespace() error = %v", err)
+	}
+	createServerWorker(t, ctx, store, "default", "keep-me", filepath.Join(rootBase, "default", "keep-me"))
+
+	writeAgentSpec(t, configRoot, "default", "run-me", `
+version: 1
+name: Run Me
+model:
+  name: gpt-5
+prompt: |
+  Finish immediately.
+tools:
+  - server_log
+runtime:
+  max_steps: 2
+`)
+
+	specs, err := LoadAgentSpecs(configRoot)
+	if err != nil {
+		t.Fatalf("LoadAgentSpecs() error = %v", err)
+	}
+	summary, err := SyncSpecsUpsert(ctx, store, specs, configRoot, rootBase)
+	if err != nil {
+		t.Fatalf("SyncSpecsUpsert() error = %v", err)
+	}
+	if summary.AgentsCreated != 1 {
+		t.Fatalf("summary.AgentsCreated = %d, want 1", summary.AgentsCreated)
+	}
+	if summary.AgentsDeleted != 0 {
+		t.Fatalf("summary.AgentsDeleted = %d, want 0", summary.AgentsDeleted)
+	}
+	if _, err := store.GetAgent(ctx, "default", "keep-me"); err != nil {
+		t.Fatalf("GetAgent(keep-me) error = %v, want sibling retained", err)
+	}
+	if _, err := store.GetAgent(ctx, "default", "run-me"); err != nil {
+		t.Fatalf("GetAgent(run-me) error = %v", err)
+	}
+}
+
 func TestSyncSpecsFromConfigRootRejectsDuplicateAgentRoots(t *testing.T) {
 	t.Parallel()
 

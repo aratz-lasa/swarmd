@@ -119,10 +119,10 @@ To run a single agent YAML once without leaving a long-lived server process runn
 
 ```sh
 export ANTHROPIC_API_KEY=...
-swarmd agent run -config ./path/to/agent.yaml -data-dir ./data -root ./agent-root
+swarmd agent run -config ./path/to/agent.yaml -data-dir ./agent-run-data -root ./agent-root
 ```
 
-This loads the spec, syncs it into SQLite under `-data-dir`, enqueues one trigger, and exits when the mailbox message completes (or dead-letters). Use `-disable-tool slack_post` to dry-run without Slack posts. Persistent memory lives at `<root>/.memory/`.
+This loads the spec, upserts it into SQLite under `-data-dir` (without deleting other agents in that DB), enqueues one trigger, and exits when the mailbox message completes (or dead-letters). Prefer a dedicated `-data-dir` rather than reusing a long-running `swarmd server` data directory. Use `-disable-tool slack_post` to dry-run without Slack posts. Persistent memory lives at `<root>/.memory/`.
 
 ## Deployment
 
