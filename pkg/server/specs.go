@@ -240,6 +240,17 @@ func SyncSpecsFromConfigRoot(ctx context.Context, store *cpstore.Store, configRo
 // layout (for example LoadAgentSpecFile) should pass the directory that
 // relative root_path / mount resolution should use as configRoot.
 func SyncSpecs(ctx context.Context, store *cpstore.Store, specs []AgentSpec, configRoot, defaultRootBase string) (SyncSummary, error) {
+	return syncSpecs(ctx, store, specs, configRoot, defaultRootBase, true)
+}
+
+// SyncSpecsUpsert upserts the provided agent specs without deleting other
+// agents from the store. Use this for one-shot runs that must not prune a
+// shared SQLite database.
+func SyncSpecsUpsert(ctx context.Context, store *cpstore.Store, specs []AgentSpec, configRoot, defaultRootBase string) (SyncSummary, error) {
+	return syncSpecs(ctx, store, specs, configRoot, defaultRootBase, false)
+}
+
+func syncSpecs(ctx context.Context, store *cpstore.Store, specs []AgentSpec, configRoot, defaultRootBase string, pruneMissing bool) (SyncSummary, error) {
 	if store == nil {
 		return SyncSummary{}, fmt.Errorf("sync specs requires a store")
 	}
@@ -304,6 +315,10 @@ func SyncSpecs(ctx context.Context, store *cpstore.Store, specs []AgentSpec, con
 			}
 			summary.SchedulesCreated++
 		}
+	}
+
+	if !pruneMissing {
+		return summary, nil
 	}
 
 	existingNamespaces, err := store.ListNamespaces(ctx)
